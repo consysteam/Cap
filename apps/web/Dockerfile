@@ -1,30 +1,30 @@
 FROM node:20-slim
 
-# Установлюємо pnpm глобально через npm
+# Установлюємо pnpm та необхідні системні утиліти
 RUN npm install -g pnpm
 
 WORKDIR /app
 
-# Копіюємо конфіги монорепозиторію
-COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml* ./
+# Копіюємо абсолютно всі конфіги та package.json файли для збереження структури монорепозиторію
+COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml* turbo.json* ./
 COPY apps/web/package.json ./apps/web/
+COPY packages/ ./packages/
 
-# Встановлюємо залежності для веб-частини
-RUN pnpm install --filter @cap/web
+# Встановлюємо ВСІ залежності монорепозиторію (це вирішить проблему з "effect")
+RUN pnpm install
 
-# Копіюємо весь інший код
+# Копіюємо решту файлів коду
 COPY . .
 
 # Виставляємо змінні для продакшн збірки
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Компілюємо проєкт
+# Компілюємо веб-додаток
 RUN pnpm --filter @cap/web build
 
 EXPOSE 3000
 
-# Запускаємо від імені root, щоб Railway не мав проблем із правами доступу
 USER root
 
 CMD ["pnpm", "--filter", "@cap/web", "start"]
