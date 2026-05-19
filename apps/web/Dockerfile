@@ -1,38 +1,30 @@
+FROM node:20-slim
 
-FROM node:24-alpine AS base
-RUN corepack enable
+# Установлюємо pnpm глобально через npm
+RUN npm install -g pnpm
 
-FROM base AS builder
 WORKDIR /app
+
+# Копіюємо конфіги монорепозиторію
+COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml* ./
+COPY apps/web/package.json ./apps/web/
+
+# Встановлюємо залежності для веб-частини
+RUN pnpm install --filter @cap/web
+
+# Копіюємо весь інший код
 COPY . .
 
-RUN corepack enable pnpm
-RUN pnpm install --frozen-lockfile
+# Виставляємо змінні для продакшн збірки
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
-ARG NEXT_PUBLIC_DOCKER_BUILD=true
-ENV NEXT_PUBLIC_WEB_URL=http://localhost:3000
-
-RUN pnpm run build:web
-
-
-# 3. Production image, copy all the files and run next
-FROM base AS runner
-WORKDIR /app
-
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nextjs -u 1001
-
-
-# Automatically leverage output traces to reduce image size
-# https://nextjs.org/docs/advanced-features/output-file-tracing
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
-COPY --from=builder --chown=nextjs:nodejs /app/packages/database/migrations ./apps/web/migrations
-
-
-USER nextjs
+# Компілюємо проєкт
+RUN pnpm --filter @cap/web build
 
 EXPOSE 3000
 
-CMD HOSTNAME="0.0.0.0" node apps/web/server.js
+# Запускаємо від імені root, щоб Railway не мав проблем із правами доступу
+USER root
+
+CMD ["pnpm", "--filter", "@cap/web", "start"]
